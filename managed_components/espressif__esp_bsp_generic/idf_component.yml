@@ -1,0 +1,27 @@
+dependencies:
+  button:
+    public: true
+    version: '>=2.5,<4.0'
+  esp_lcd_gc9a01: ^1
+  esp_lcd_ili9341: ^1
+  esp_lcd_touch_cst816s: ^1
+  esp_lcd_touch_ft5x06: ^1
+  esp_lcd_touch_gt1151: ^1
+  esp_lcd_touch_gt911: ^1
+  esp_lcd_touch_tt21100: ^1
+  espressif/esp_lvgl_port:
+    public: true
+    version: ^2
+  idf: '>=4.4.2'
+  led_indicator:
+    public: true
+    version: ^0.9
+description: Generic Board Support Package (BSP)
+repository: git://github.com/espressif/esp-bsp.git
+repository_info:
+  commit_sha: 7d782767e0fc92d2be1c810906d9ea3fdbdd2fca
+  path: bsp/esp_bsp_generic
+tags:
+- bsp
+url: https://github.com/espressif/esp-bsp/tree/master/bsp/esp_bsp_generic
+version: 1.2.1
