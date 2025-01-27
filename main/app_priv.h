@@ -66,3 +66,9 @@ void door_lock_init();
         .storage_partition_name = "nvs", .netif_queue_size = 10, .task_queue_size = 10, \
     }
 #endif
+
+namespace esp_matter {
+namespace console {
+    void app_dbg_register_commands();
+}
+}

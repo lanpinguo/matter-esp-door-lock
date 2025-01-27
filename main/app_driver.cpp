@@ -22,6 +22,9 @@
 
 #include <app_priv.h>
 
+#include <soc/gpio_reg.h>
+#include <soc/io_mux_reg.h>
+
 static const char *TAG = "app_driver";
 
 using namespace chip::app::Clusters;
@@ -92,17 +95,20 @@ static void gpio_process_task(void* arg)
     uint32_t io_num;
     for (;;) {
         if (xQueueReceive(gpio_evt_queue, &io_num, portMAX_DELAY)) {
-            ESP_LOGI(TAG, "GPIO[%" PRIu32 "] intr, val: %d\n", io_num, gpio_get_level((gpio_num_t)io_num));
             if (lock_state == false) {
                 ESP_LOGI(TAG, "unlock\n");
+                vTaskDelay(1000 / portTICK_PERIOD_MS);
                 gpio_set_level(GPIO_OUTPUT_IO_0, 1);
                 vTaskDelay(1000 / portTICK_PERIOD_MS);
                 gpio_set_level(GPIO_OUTPUT_IO_0, 0);
                 vTaskDelay(500 / portTICK_PERIOD_MS);
-
-                // enable interrupt
-                gpio_intr_enable(GPIO_INPUT_IO_0);
             }
+            else {
+                ESP_LOGI(TAG, "skip the current bell call\n");
+                vTaskDelay(5000 / portTICK_PERIOD_MS);
+            }
+            // enable interrupt
+            gpio_intr_enable(GPIO_INPUT_IO_0);
         }
     }
 }
@@ -156,6 +162,7 @@ esp_err_t app_driver_attribute_update(app_driver_handle_t driver_handle, uint16_
 {
     esp_err_t err = ESP_OK;
     ESP_LOGI(TAG, "attribute update endpoint %u - cluster %lu - attribute %lu -> value %lu", endpoint_id, cluster_id, attribute_id, val->val.u32);
+
     if (cluster_id == DoorLock::Id) {
         if (attribute_id == DoorLock::Attributes::LockState::Id) {
             DlLockState lock_state = (DlLockState)val->val.u32;
