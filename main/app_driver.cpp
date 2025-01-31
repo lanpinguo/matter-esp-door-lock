@@ -89,6 +89,15 @@ esp_err_t app_driver_lock_state(uint32_t enable)
     return ESP_OK;
 }
 
+esp_err_t app_driver_unlock()
+{
+    gpio_set_level(GPIO_OUTPUT_IO_0, 1);
+    gpio_hold_en(GPIO_OUTPUT_IO_0);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    gpio_set_level(GPIO_OUTPUT_IO_0, 0);
+    gpio_hold_dis(GPIO_OUTPUT_IO_0);
+    return ESP_OK;
+}
 
 static void gpio_process_task(void* arg)
 {
@@ -97,11 +106,8 @@ static void gpio_process_task(void* arg)
         if (xQueueReceive(gpio_evt_queue, &io_num, portMAX_DELAY)) {
             if (lock_state == false) {
                 ESP_LOGI(TAG, "unlock\n");
-                vTaskDelay(1000 / portTICK_PERIOD_MS);
-                gpio_set_level(GPIO_OUTPUT_IO_0, 1);
-                vTaskDelay(1000 / portTICK_PERIOD_MS);
-                gpio_set_level(GPIO_OUTPUT_IO_0, 0);
-                vTaskDelay(500 / portTICK_PERIOD_MS);
+                vTaskDelay(2000 / portTICK_PERIOD_MS);
+                app_driver_unlock();
             }
             else {
                 ESP_LOGI(TAG, "skip the current bell call\n");
@@ -153,6 +159,10 @@ void hw_gpio_init(void)
     //hook isr handler for specific gpio pin
     gpio_isr_handler_add(GPIO_INPUT_IO_1, gpio_isr_handler, (void*) GPIO_INPUT_IO_1);
 
+    gpio_sleep_sel_dis(GPIO_INPUT_IO_0);
+    gpio_sleep_sel_dis(GPIO_INPUT_IO_1);
+    gpio_sleep_sel_dis(GPIO_OUTPUT_IO_0);
+    gpio_sleep_sel_dis(GPIO_OUTPUT_IO_1);
 
     ESP_LOGI(TAG, "hw_gpio_init done");
 }

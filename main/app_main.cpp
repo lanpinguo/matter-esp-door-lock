@@ -153,19 +153,18 @@ extern "C" void app_main()
     /* Initialize the ESP NVS layer */
     nvs_flash_init();
 
-#if 0
 
 #if CONFIG_PM_ENABLE
     esp_pm_config_t pm_config = {
         .max_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ,
-        .min_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ,
+        .min_freq_mhz = 160,
 #if CONFIG_FREERTOS_USE_TICKLESS_IDLE
         .light_sleep_enable = true
 #endif
     };
     err = esp_pm_configure(&pm_config);
 #endif
-#endif
+
 
     /* Create a Matter node and add the mandatory Root Node device type on endpoint 0 */
     node::config_t node_config;
@@ -203,7 +202,6 @@ extern "C" void app_main()
     /* Matter start */
     err = esp_matter::start(app_event_cb);
     ABORT_APP_ON_FAILURE(err == ESP_OK, ESP_LOGE(TAG, "Failed to start Matter, err:%d", err));
-
 
     /* do nothing now */
     door_lock_init();
