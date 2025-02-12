@@ -13,7 +13,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "driver/gpio.h"
 
 #include <esp_matter.h>
 #include <app-common/zap-generated/attributes/Accessors.h>
@@ -25,11 +24,70 @@
 #include <soc/gpio_reg.h>
 #include <soc/io_mux_reg.h>
 
+#include "esp_sleep.h"
+#include "driver/gpio.h"
+#include "driver/rtc_io.h"
+#include "ulp_lp_core.h"
+#include "ulp_main.h"
+
 static const char *TAG = "app_driver";
+
+
 
 using namespace chip::app::Clusters;
 using namespace esp_matter;
 using namespace chip::app::Clusters::DoorLock;
+
+
+extern const uint8_t ulp_main_bin_start[] asm("_binary_ulp_main_bin_start");
+extern const uint8_t ulp_main_bin_end[]   asm("_binary_ulp_main_bin_end");
+
+static void init_ulp_program(void);
+
+#define PWR_MON_PIN         GPIO_NUM_1
+#define PWR_OFF_PIN         GPIO_NUM_2
+
+void ulp_driver_init(void)
+{
+
+    /* Initialize selected GPIO as RTC IO, enable input, disable pullup and pulldown */
+    rtc_gpio_init(PWR_MON_PIN);
+    rtc_gpio_set_direction(PWR_MON_PIN, RTC_GPIO_MODE_INPUT_ONLY);
+    rtc_gpio_pulldown_dis(PWR_MON_PIN);
+    rtc_gpio_pullup_dis(PWR_MON_PIN);
+
+    rtc_gpio_init(PWR_OFF_PIN);
+    rtc_gpio_set_direction(PWR_OFF_PIN, RTC_GPIO_MODE_OUTPUT_ONLY);
+    rtc_gpio_pulldown_en(PWR_OFF_PIN);
+    rtc_gpio_pullup_dis(PWR_OFF_PIN);
+
+    esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+    /* not a wakeup from ULP, load the firmware */
+    if (cause != ESP_SLEEP_WAKEUP_ULP) {
+        printf("Not a ULP wakeup, initializing it! \n");
+        init_ulp_program();
+    }
+
+
+    ESP_ERROR_CHECK( esp_sleep_enable_ulp_wakeup());
+
+}
+
+static void init_ulp_program(void)
+{
+    esp_err_t err = ulp_lp_core_load_binary(ulp_main_bin_start, (ulp_main_bin_end - ulp_main_bin_start));
+    ESP_ERROR_CHECK(err);
+
+    /* Start the program */
+    ulp_lp_core_cfg_t cfg = {
+        .wakeup_source = ULP_LP_CORE_WAKEUP_SOURCE_LP_TIMER,
+        .lp_timer_sleep_duration_us = 10000,
+    };
+
+    err = ulp_lp_core_run(&cfg);
+    ESP_ERROR_CHECK(err);
+}
+
 
 app_driver_handle_t app_driver_button_init()
 {
@@ -53,7 +111,7 @@ app_driver_handle_t app_driver_button_init()
  * GPIO_OUTPUT_PIN_SEL                0000000000000000000011000000000000000000
  * */
 #define GPIO_INPUT_IO_0    GPIO_NUM_3
-#define GPIO_INPUT_IO_1    GPIO_NUM_20
+#define GPIO_INPUT_IO_1    GPIO_NUM_1
 #define GPIO_INPUT_PIN_SEL  ((1ULL<<GPIO_INPUT_IO_0) | (1ULL<<GPIO_INPUT_IO_1))
 /*
  * Let's say, GPIO_INPUT_IO_0=4, GPIO_INPUT_IO_1=5
@@ -106,7 +164,10 @@ static void gpio_process_task(void* arg)
         if (xQueueReceive(gpio_evt_queue, &io_num, portMAX_DELAY)) {
             if (lock_state == false) {
                 ESP_LOGI(TAG, "unlock\n");
-                vTaskDelay(2000 / portTICK_PERIOD_MS);
+                vTaskDelay(1000 / portTICK_PERIOD_MS);
+                app_driver_unlock();
+                /* need two seconds to unlock */
+                vTaskDelay(1000 / portTICK_PERIOD_MS);
                 app_driver_unlock();
             }
             else {
@@ -137,14 +198,14 @@ void hw_gpio_init(void)
     //configure GPIO with the given settings
     gpio_config(&io_conf);
 
-    //interrupt of rising edge
+    //interrupt of falling edge
     io_conf.intr_type = GPIO_INTR_NEGEDGE;
-    //bit mask of the pins, use GPIO4/5 here
+    //bit mask of the pins
     io_conf.pin_bit_mask = GPIO_INPUT_PIN_SEL;
     //set as input mode
     io_conf.mode = GPIO_MODE_INPUT;
     //enable pull-up mode
-    io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
     gpio_config(&io_conf);
 
     //create a queue to handle gpio event from isr
@@ -156,14 +217,20 @@ void hw_gpio_init(void)
     gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
     //hook isr handler for specific gpio pin
     gpio_isr_handler_add(GPIO_INPUT_IO_0, gpio_isr_handler, (void*) GPIO_INPUT_IO_0);
-    //hook isr handler for specific gpio pin
-    gpio_isr_handler_add(GPIO_INPUT_IO_1, gpio_isr_handler, (void*) GPIO_INPUT_IO_1);
 
     gpio_sleep_sel_dis(GPIO_INPUT_IO_0);
-    gpio_sleep_sel_dis(GPIO_INPUT_IO_1);
+    rtc_gpio_init(GPIO_INPUT_IO_0);
+    rtc_gpio_set_direction(GPIO_INPUT_IO_0, RTC_GPIO_MODE_INPUT_ONLY);
+    rtc_gpio_pulldown_dis(GPIO_INPUT_IO_0);
+    rtc_gpio_pullup_en(GPIO_INPUT_IO_0);
+    gpio_wakeup_enable(GPIO_INPUT_IO_0,  GPIO_INTR_LOW_LEVEL);
+    esp_sleep_enable_gpio_wakeup();
+
+    // esp_deep_sleep_enable_gpio_wakeup(GPIO_INPUT_IO_0, ESP_GPIO_WAKEUP_GPIO_LOW);
     gpio_sleep_sel_dis(GPIO_OUTPUT_IO_0);
     gpio_sleep_sel_dis(GPIO_OUTPUT_IO_1);
 
+    // ulp_driver_init();
     ESP_LOGI(TAG, "hw_gpio_init done");
 }
 

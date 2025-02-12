@@ -37,6 +37,10 @@ using namespace chip;
 
 constexpr auto k_timeout_seconds = 300;
 
+#define APP_DRIVER_DBG                  0
+#define APP_PM_DRIVER_DBG               0
+
+
 #if CONFIG_ENABLE_ENCRYPTED_OTA
 extern const char decryption_key_start[] asm("_binary_esp_image_encryption_key_pem_start");
 extern const char decryption_key_end[] asm("_binary_esp_image_encryption_key_pem_end");
@@ -153,19 +157,20 @@ extern "C" void app_main()
     /* Initialize the ESP NVS layer */
     nvs_flash_init();
 
-
+#if !APP_PM_DRIVER_DBG
 #if CONFIG_PM_ENABLE
     esp_pm_config_t pm_config = {
         .max_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ,
-        .min_freq_mhz = 160,
+        .min_freq_mhz = 80,
 #if CONFIG_FREERTOS_USE_TICKLESS_IDLE
         .light_sleep_enable = true
 #endif
     };
     err = esp_pm_configure(&pm_config);
 #endif
+#endif
 
-
+#if !APP_DRIVER_DBG
     /* Create a Matter node and add the mandatory Root Node device type on endpoint 0 */
     node::config_t node_config;
 
@@ -202,10 +207,12 @@ extern "C" void app_main()
     /* Matter start */
     err = esp_matter::start(app_event_cb);
     ABORT_APP_ON_FAILURE(err == ESP_OK, ESP_LOGE(TAG, "Failed to start Matter, err:%d", err));
-
+#endif
     /* do nothing now */
     door_lock_init();
 
+
+#if !APP_DRIVER_DBG
 #if CONFIG_ENABLE_ENCRYPTED_OTA
     err = esp_matter_ota_requestor_encrypted_init(s_decryption_key, s_decryption_key_len);
     ABORT_APP_ON_FAILURE(err == ESP_OK, ESP_LOGE(TAG, "Failed to initialized the encrypted OTA, err: %d", err));
@@ -220,5 +227,5 @@ extern "C" void app_main()
 #endif
     esp_matter::console::init();
 #endif
-
+#endif
 }
